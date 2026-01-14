@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maritime Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="dashboard" class="dashboard hidden">
+        <div class="dashboard-header">
+            <div class="company-logo">
+                <span class="anchor-icon">&#9875;</span>
+                <span class="company-name">JETSAM MARITIME</span>
+            </div>
+            <button class="close-btn" onclick="closeDashboard()">&times;</button>
+        </div>
+
+        <div class="dashboard-content">
+            <!-- Player Info Card -->
+            <div class="card player-card">
+                <div class="card-header">
+                    <span class="card-title">Captain Profile</span>
+                </div>
+                <div class="card-body">
+                    <div class="level-display">
+                        <div class="level-circle">
+                            <span id="player-level">1</span>
+                        </div>
+                        <div class="level-info">
+                            <span id="player-title" class="title">Deckhand</span>
+                            <div class="xp-bar-container">
+                                <div id="xp-bar" class="xp-bar" style="width: 0%"></div>
+                            </div>
+                            <span id="xp-text" class="xp-text">0 / 1000 XP</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon boat-icon">&#9973;</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="boat-deliveries">0</span>
+                        <span class="stat-label">Boat Deliveries</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon dock-icon">&#128230;</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="dock-deliveries">0</span>
+                        <span class="stat-label">Dock Deliveries</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon money-icon">&#128176;</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="total-earnings">$0</span>
+                        <span class="stat-label">Total Earnings</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon streak-icon">&#128293;</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="current-streak">0</span>
+                        <span class="stat-label">Current Streak</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Unlocks Section -->
+            <div class="card unlocks-card">
+                <div class="card-header">
+                    <span class="card-title">Unlocks & Abilities</span>
+                </div>
+                <div class="card-body">
+                    <div id="unlocks-list" class="unlocks-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pay Multiplier -->
+            <div class="card multiplier-card">
+                <div class="card-header">
+                    <span class="card-title">Current Bonuses</span>
+                </div>
+                <div class="card-body">
+                    <div class="bonus-row">
+                        <span class="bonus-label">Pay Multiplier</span>
+                        <span id="pay-multiplier" class="bonus-value">100%</span>
+                    </div>
+                    <div class="bonus-row">
+                        <span class="bonus-label">Streak Bonus</span>
+                        <span id="streak-bonus" class="bonus-value">+0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-footer">
+            <span class="footer-text">Press ESC to close</span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -11,9 +11,9 @@ Config.BusinessLabel = 'Jetsam Maritime Logistics'
 Config.JobName = 'jetsam' -- QB-Core job name (optional, set to nil for civilian job)
 
 -- Framework Settings
-Config.Framework = 'qb' -- 'qb' or 'esx'
+Config.Framework = 'qbx' -- 'qbx', 'qb', or 'esx' (this box is pure Qbox)
 Config.Target = 'ox_target' -- 'ox_target', 'qb-target', or 'qtarget'
-Config.Inventory = 'qs-inventory' -- 'ox_inventory', 'qb-inventory', 'qs-inventory'
+Config.Inventory = 'ox_inventory' -- 'ox_inventory', 'qb-inventory', 'qs-inventory'
 
 -----------------------------------------------------------
 -- CARGO CRATE METADATA SYSTEM (qs-inventory)

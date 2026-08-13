@@ -23,7 +23,14 @@ local FrameworkObject = nil
 local function InitFramework()
     if FrameworkObject then return FrameworkObject end
 
-    if Framework == 'qb' then
+    if Framework == 'qbx' then
+        -- Qbox: this build exposes NO GetCoreObject (both qb-core and qbx_core
+        -- variants THROW). All qbx code paths use discrete exports
+        -- (exports.qbx_core:GetPlayer / :GetPlayerData / ...), so there is no
+        -- core object to cache. Return a truthy sentinel purely so the
+        -- `if not Core then return` guards in the generic functions pass.
+        FrameworkObject = { qbx = true }
+    elseif Framework == 'qb' then
         FrameworkObject = exports['qb-core']:GetCoreObject()
     elseif Framework == 'esx' then
         if GetResourceState('es_extended') == 'started' then
@@ -53,6 +60,17 @@ end
 
 function Bridge.IsQB()
     return Framework == 'qb'
+end
+
+function Bridge.IsQBX()
+    return Framework == 'qbx'
+end
+
+-- True for any QBCore-family framework (qb or qbx). qbx keeps qb-style player
+-- object methods (Player.Functions.AddMoney, Player.PlayerData.*), so most
+-- discrete logic is shared between the two.
+local function IsQBFamily()
+    return Framework == 'qb' or Framework == 'qbx'
 end
 
 function Bridge.IsESX()
@@ -121,6 +139,11 @@ if not IsDuplicityVersion() then
 
     -- Get player data
     function Bridge.GetPlayerData()
+        if Framework == 'qbx' then
+            -- Qbox client: discrete export, qb-style PlayerData shape
+            return exports.qbx_core:GetPlayerData()
+        end
+
         local Core = InitFramework()
         if not Core then return nil end
 
@@ -138,7 +161,7 @@ if not IsDuplicityVersion() then
         local playerData = Bridge.GetPlayerData()
         if not playerData then return nil end
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return playerData.citizenid
         elseif Framework == 'esx' then
             return playerData.identifier
@@ -152,7 +175,7 @@ if not IsDuplicityVersion() then
         local playerData = Bridge.GetPlayerData()
         if not playerData then return nil end
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return playerData.job
         elseif Framework == 'esx' then
             return playerData.job
@@ -166,13 +189,7 @@ if not IsDuplicityVersion() then
         local job = Bridge.GetJob()
         if not job then return false end
 
-        if Framework == 'qb' then
-            return job.name == jobName
-        elseif Framework == 'esx' then
-            return job.name == jobName
-        end
-
-        return false
+        return job.name == jobName
     end
 
     -- Get player money (client-side, may not be accurate)
@@ -182,7 +199,7 @@ if not IsDuplicityVersion() then
 
         moneyType = moneyType or 'cash'
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return playerData.money and playerData.money[moneyType] or 0
         elseif Framework == 'esx' then
             if moneyType == 'cash' then
@@ -204,7 +221,7 @@ if not IsDuplicityVersion() then
         local playerData = Bridge.GetPlayerData()
         if not playerData then return false end
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return playerData.citizenid ~= nil
         elseif Framework == 'esx' then
             return playerData.identifier ~= nil
@@ -218,7 +235,7 @@ if not IsDuplicityVersion() then
         local playerData = Bridge.GetPlayerData()
         if not playerData then return 'Unknown' end
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             local charinfo = playerData.charinfo
             if charinfo then
                 return (charinfo.firstname or '') .. ' ' .. (charinfo.lastname or '')
@@ -232,7 +249,8 @@ if not IsDuplicityVersion() then
 
     -- Framework events - Register standardized event listeners
     function Bridge.OnPlayerLoaded(callback)
-        if Framework == 'qb' then
+        if IsQBFamily() then
+            -- qbx keeps the QBCore-compat client events
             RegisterNetEvent('QBCore:Client:OnPlayerLoaded', callback)
         elseif Framework == 'esx' then
             RegisterNetEvent('esx:playerLoaded', function(xPlayer)
@@ -242,7 +260,7 @@ if not IsDuplicityVersion() then
     end
 
     function Bridge.OnPlayerUnload(callback)
-        if Framework == 'qb' then
+        if IsQBFamily() then
             RegisterNetEvent('QBCore:Client:OnPlayerUnload', callback)
         elseif Framework == 'esx' then
             RegisterNetEvent('esx:onPlayerLogout', callback)
@@ -250,7 +268,7 @@ if not IsDuplicityVersion() then
     end
 
     function Bridge.OnJobUpdate(callback)
-        if Framework == 'qb' then
+        if IsQBFamily() then
             RegisterNetEvent('QBCore:Client:OnJobUpdate', function(job)
                 callback(job)
             end)
@@ -270,6 +288,12 @@ if IsDuplicityVersion() then
 
     -- Get player object
     function Bridge.GetPlayer(source)
+        if Framework == 'qbx' then
+            -- Qbox: discrete export. Player object keeps qb-style methods:
+            -- Player.Functions.AddMoney/RemoveMoney, Player.PlayerData.*
+            return exports.qbx_core:GetPlayer(source)
+        end
+
         local Core = InitFramework()
         if not Core then return nil end
 
@@ -287,7 +311,7 @@ if IsDuplicityVersion() then
         local player = Bridge.GetPlayer(source)
         if not player then return nil end
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return player.PlayerData.citizenid
         elseif Framework == 'esx' then
             return player.identifier
@@ -301,7 +325,7 @@ if IsDuplicityVersion() then
         local player = Bridge.GetPlayer(source)
         if not player then return nil end
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return player.PlayerData.job
         elseif Framework == 'esx' then
             return player.job
@@ -324,7 +348,7 @@ if IsDuplicityVersion() then
 
         moneyType = moneyType or 'cash'
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return player.PlayerData.money and player.PlayerData.money[moneyType] or 0
         elseif Framework == 'esx' then
             if moneyType == 'cash' then
@@ -345,7 +369,7 @@ if IsDuplicityVersion() then
         moneyType = moneyType or 'cash'
         reason = reason or 'dps-maritime'
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return player.Functions.AddMoney(moneyType, amount, reason)
         elseif Framework == 'esx' then
             if moneyType == 'cash' then
@@ -367,7 +391,7 @@ if IsDuplicityVersion() then
         moneyType = moneyType or 'cash'
         reason = reason or 'dps-maritime'
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             return player.Functions.RemoveMoney(moneyType, amount, reason)
         elseif Framework == 'esx' then
             if moneyType == 'cash' then
@@ -386,7 +410,7 @@ if IsDuplicityVersion() then
         local player = Bridge.GetPlayer(source)
         if not player then return GetPlayerName(source) end
 
-        if Framework == 'qb' then
+        if IsQBFamily() then
             local charinfo = player.PlayerData.charinfo
             if charinfo then
                 return (charinfo.firstname or '') .. ' ' .. (charinfo.lastname or '')
@@ -400,7 +424,23 @@ if IsDuplicityVersion() then
 
     -- Register command with permission check
     function Bridge.RegisterCommand(name, helpText, args, argsRequired, callback, permission)
-        if Framework == 'qb' then
+        if Framework == 'qbx' then
+            -- Qbox has no GetCoreObject/Commands.Add. Use native RegisterCommand
+            -- (callback receives a POSITIONAL args array, matching the args[1]/
+            -- args[2] contract the qb Commands.Add callbacks rely on) with a
+            -- manual ace permission gate for admin/god commands.
+            RegisterCommand(name, function(source, cmdArgs)
+                if permission == 'admin' or permission == 'god' then
+                    local allowed = IsPlayerAceAllowed(source, 'group.admin')
+                        or IsPlayerAceAllowed(source, 'command')
+                    if not allowed then
+                        Bridge.Notify(source, 'No Permission', 'You do not have permission to use this command', 'error')
+                        return
+                    end
+                end
+                callback(source, cmdArgs)
+            end, false)
+        elseif Framework == 'qb' then
             local Core = InitFramework()
             if Core then
                 Core.Commands.Add(name, helpText, args, argsRequired, callback, permission)
@@ -429,7 +469,19 @@ if IsDuplicityVersion() then
 
     -- Check if player has permission
     function Bridge.HasPermission(source, permission)
-        if Framework == 'qb' then
+        if Framework == 'qbx' then
+            -- Qbox: ace-based permissions (no GetCoreObject). Admin groups are
+            -- granted group.admin / group.god principals by qbx.
+            if permission == 'admin' then
+                return IsPlayerAceAllowed(source, 'group.admin')
+                    or IsPlayerAceAllowed(source, 'group.god')
+                    or IsPlayerAceAllowed(source, 'command')
+            elseif permission == 'god' then
+                return IsPlayerAceAllowed(source, 'group.god')
+                    or IsPlayerAceAllowed(source, 'command')
+            end
+            return IsPlayerAceAllowed(source, 'command')
+        elseif Framework == 'qb' then
             local Core = InitFramework()
             if Core and Core.Functions.HasPermission then
                 return Core.Functions.HasPermission(source, permission)
@@ -460,7 +512,15 @@ if IsDuplicityVersion() then
 
     -- Framework events - Server side
     function Bridge.OnPlayerLoaded(callback)
-        if Framework == 'qb' then
+        if Framework == 'qbx' then
+            -- qbx fires QBCore:Server:OnPlayerLoaded with the Player object;
+            -- derive the source from it (the magic `source` global is not
+            -- reliably set for locally-fired events).
+            AddEventHandler('QBCore:Server:OnPlayerLoaded', function(player)
+                local src = (player and player.PlayerData and player.PlayerData.source) or source
+                callback(src)
+            end)
+        elseif Framework == 'qb' then
             AddEventHandler('QBCore:Server:OnPlayerLoaded', function()
                 callback(source)
             end)
@@ -506,19 +566,38 @@ if IsDuplicityVersion() then
         return false
     end
 
-    function Bridge.Inventory.RemoveItem(source, item, count, metadata)
+    function Bridge.Inventory.RemoveItem(source, item, count, metadata, slot)
         local inventory = Bridge.Inventory.GetScript()
         count = count or 1
 
         if inventory == 'ox_inventory' then
-            return exports.ox_inventory:RemoveItem(source, item, count, metadata)
+            -- ox signature: RemoveItem(inv, item, count, metadata, slot)
+            return exports.ox_inventory:RemoveItem(source, item, count, metadata, slot)
         elseif inventory == 'qb-inventory' then
-            return exports['qb-inventory']:RemoveItem(source, item, count, false, 'dps-maritime')
+            return exports['qb-inventory']:RemoveItem(source, item, count, slot, 'dps-maritime')
         elseif inventory == 'qs-inventory' then
-            return exports['qs-inventory']:RemoveItem(source, item, count, false, 'dps-maritime')
+            return exports['qs-inventory']:RemoveItem(source, item, count, slot, 'dps-maritime')
         end
 
         return false
+    end
+
+    -- Return an array of slot entries { slot, count, metadata } for an item.
+    -- Needed when metadata (e.g. cargo manifest fields) and the exact slot matter.
+    function Bridge.Inventory.GetItemSlots(source, item)
+        local inventory = Bridge.Inventory.GetScript()
+
+        if inventory == 'ox_inventory' then
+            return exports.ox_inventory:Search(source, 'slots', item) or {}
+        elseif inventory == 'qb-inventory' then
+            local data = exports['qb-inventory']:GetItemByName(source, item)
+            return data and { { slot = data.slot, count = data.amount, metadata = data.info } } or {}
+        elseif inventory == 'qs-inventory' then
+            local data = exports['qs-inventory']:GetItemByName(source, item)
+            return data and { { slot = data.slot, count = data.amount, metadata = data.info } } or {}
+        end
+
+        return {}
     end
 
     function Bridge.Inventory.HasItem(source, item, count)

@@ -6,9 +6,9 @@ const dashboard = document.getElementById('dashboard');
 const UNLOCKS = [
     { name: 'Dock Work', level: 1, icon: '&#128230;' },
     { name: 'Boat Deliveries', level: 4, icon: '&#9973;' },
-    { name: 'Fleet Ownership', level: 5, icon: '&#9875;' },
+    { name: 'VIP Transport', level: 6, icon: '&#128100;' },
+    { name: 'Fleet Ownership', level: 7, icon: '&#9875;' },
     { name: 'Hazmat Cargo', level: 6, icon: '&#9888;' },
-    { name: 'VIP Transport', level: 7, icon: '&#128100;' },
     { name: 'Smuggler\'s Radar', level: 9, icon: '&#128225;' },
     { name: 'Master Captain', level: 10, icon: '&#127775;' },
 ];

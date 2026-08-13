@@ -378,8 +378,8 @@ Config.DeepSeaPorts = {
     ['far_northwest_outpost'] = {
         name = 'Northwest Frontier',
         shortName = 'NW Frontier',
-        description = 'Extreme northwest waters beyond Roxwood - harsh conditions, extreme pay',
-        -- Far northwest, beyond Roxwood and Paleto Bay
+        description = 'Extreme northwest waters far beyond Paleto Bay - harsh conditions, extreme pay',
+        -- Far northwest deep ocean, well beyond Paleto Bay
         coords = vector3(-4500.0, 9500.0, 1.0),
         dockCoords = vector3(-4495.0, 9495.0, 0.5),
         boatSpawn = vector4(-4490.0, 9490.0, -0.5, 135.0),
@@ -463,7 +463,7 @@ Config.WeatherZones = {
     },
     ['arctic_storm'] = {
         name = 'Arctic Storm Zone',
-        coords = vector3(-4500.0, 9500.0, 0.0),  -- Far northwest beyond Roxwood
+        coords = vector3(-4500.0, 9500.0, 0.0),  -- Far northwest deep ocean
         radius = 5000,                     -- 5km radius - huge storm zone
         weatherType = 'blizzard',
         effects = {

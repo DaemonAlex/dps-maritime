@@ -69,14 +69,17 @@ lib.callback.register('dps-maritime:server:purchaseBoat', function(source, boatM
         return { error = 'You have reached the maximum fleet size (' .. Config.Fleet.MaxBoatsPerPlayer .. ' boats)' }
     end
 
-    -- Check funds
-    local bank = Player.PlayerData.money.bank
+    -- Check funds (H2: Player was an undefined global)
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return { error = 'Player not found' } end
+
+    local bank = Bridge.GetMoney(source, 'bank')
     if bank < boat.price then
         return { error = 'You need ' .. Maritime.FormatMoney(boat.price) .. ' in your bank account' }
     end
 
     -- Purchase
-    Player.Functions.RemoveMoney('bank', boat.price, 'boat-purchase-' .. boatModel)
+    Bridge.RemoveMoney(source, 'bank', boat.price, 'boat-purchase-' .. boatModel)
 
     local boatId = Database.AddBoatToFleet(identifier, boatModel, boatName or boat.label)
 
@@ -120,9 +123,12 @@ lib.callback.register('dps-maritime:server:sellBoat', function(source, boatId)
         sellPrice = math.floor(basePrice * (boat.condition / 100))
     end
 
-    -- Remove boat and pay player
+    -- Remove boat and pay player (H2: Player was an undefined global)
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return { error = 'Player not found' } end
+
     Database.RemoveBoatFromFleet(boatId, identifier)
-    Player.Functions.AddMoney('bank', sellPrice, 'boat-sale-' .. boat.model)
+    Bridge.AddMoney(source, 'bank', sellPrice, 'boat-sale-' .. boat.model)
 
     TriggerClientEvent('ox_lib:notify', source, {
         title = 'Jetsam Maritime',
@@ -133,34 +139,11 @@ lib.callback.register('dps-maritime:server:sellBoat', function(source, boatId)
     return { success = true, sellPrice = sellPrice }
 end)
 
------------------------------------------------------------
--- SPAWN OWNED BOAT
------------------------------------------------------------
-
-lib.callback.register('dps-maritime:server:spawnOwnedBoat', function(source, boatId, spawnCoords)
-    local identifier = Bridge.GetIdentifier(source)
-    if not identifier then return nil end
-    local boat = Database.GetBoatById(boatId)
-
-    if not boat or boat.owner ~= identifier then
-        return { error = 'Boat not found' }
-    end
-
-    if boat.condition <= 0 then
-        return { error = 'This boat is too damaged and needs repair' }
-    end
-
-    local boatConfig = Config.Boats[boat.model]
-
-    return {
-        success = true,
-        model = boat.model,
-        fuel = boat.fuel,
-        condition = boat.condition,
-        boatId = boatId,
-        config = boatConfig,
-    }
-end)
+-- NOTE (M5): the original standalone `spawnOwnedBoat` callback that lived here
+-- was DEAD CODE - it was overridden by the garage-aware registration of the
+-- same event name further down ("SPAWN CALLBACK WITH GARAGE SYNC"). It has been
+-- removed so only the garage-aware version (which enforces double-spawn
+-- prevention) is active.
 
 -----------------------------------------------------------
 -- STORE BOAT
@@ -206,12 +189,16 @@ lib.callback.register('dps-maritime:server:repairBoat', function(source, boatId)
         return { error = 'Boat doesn\'t need repairs' }
     end
 
-    local bank = Player.PlayerData.money.bank
+    -- H2: Player was an undefined global
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return { error = 'Player not found' } end
+
+    local bank = Bridge.GetMoney(source, 'bank')
     if bank < repairCost then
         return { error = 'You need ' .. Maritime.FormatMoney(repairCost) .. ' to repair this boat' }
     end
 
-    Player.Functions.RemoveMoney('bank', repairCost, 'boat-repair')
+    Bridge.RemoveMoney(source, 'bank', repairCost, 'boat-repair')
     Database.UpdateBoatCondition(boatId, 100, boat.fuel)
 
     TriggerClientEvent('ox_lib:notify', source, {
@@ -244,9 +231,12 @@ lib.callback.register('dps-maritime:server:insuranceClaim', function(source, boa
     -- Insurance payout
     local payout = math.floor(boatConfig.price * Config.Fleet.InsurancePayoutPercent)
 
-    -- Remove boat and pay insurance
+    -- Remove boat and pay insurance (H2: Player was an undefined global)
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return { error = 'Player not found' } end
+
     Database.RemoveBoatFromFleet(boatId, identifier)
-    Player.Functions.AddMoney('bank', payout, 'boat-insurance')
+    Bridge.AddMoney(source, 'bank', payout, 'boat-insurance')
 
     TriggerClientEvent('ox_lib:notify', source, {
         title = 'Jetsam Maritime',
@@ -701,12 +691,16 @@ lib.callback.register('dps-maritime:server:recoverBoatFromGarage', function(sour
     -- Calculate recovery fee using impound settings
     local fee = Config.CalculateRecoveryFee and Config.CalculateRecoveryFee(boat.model, false, 0) or 500
 
-    local bank = Player.PlayerData.money.bank
+    -- H2: Player was an undefined global
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return { error = 'Player not found' } end
+
+    local bank = Bridge.GetMoney(source, 'bank')
     if bank < fee then
         return { error = 'You need ' .. Maritime.FormatMoney(fee) .. ' to recover this boat' }
     end
 
-    Player.Functions.RemoveMoney('bank', fee, 'boat-recovery')
+    Bridge.RemoveMoney(source, 'bank', fee, 'boat-recovery')
 
     -- Restore boat with reduced condition
     local newCondition = Config.Impound and Config.Impound.RecoveredHealthPercent or 50

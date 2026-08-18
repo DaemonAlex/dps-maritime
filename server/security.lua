@@ -115,22 +115,31 @@ function Security.OnJobStart(source, startPort, endPort, jobType)
     local coords = GetPlayerPosition(source)
     local startPortCoords = GetPortCoords(startPort)
 
-    -- Validate player is near start port
+    -- Validate player is near start port. This used to log and allow, which meant
+    -- a player could stand AT the destination, declare a distant start port, wait
+    -- out the minimum job duration and collect full port-to-port pay without
+    -- moving. Record the real starting position so completion pays for the
+    -- distance actually travelled, and flag the attempt.
+    local startedAwayFromPort = false
     if coords and startPortCoords then
         local distToStart = CalculateDistance(coords, startPortCoords)
         if distToStart > VALIDATION_CONFIG.StartPositionRadius then
+            startedAwayFromPort = true
             LogSuspicious(source, 'Started job far from port', {
                 distance = distToStart,
                 expected = VALIDATION_CONFIG.StartPositionRadius,
                 port = startPort,
             })
-            -- Still allow but flag it
         end
     end
 
     JobStartData[source] = {
+        startedAwayFromPort = startedAwayFromPort,
         startCoords = coords,
-        startPortCoords = startPortCoords,
+        -- when the player did not actually start at the port, treat their real
+        -- position as the origin so pay reflects the distance they truly cover
+        startPortCoords = startedAwayFromPort and coords or startPortCoords,
+        declaredStartPortCoords = startPortCoords,
         endPortCoords = GetPortCoords(endPort),
         startTime = os.time(),
         startPort = startPort,

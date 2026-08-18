@@ -47,6 +47,16 @@ local function GrantEventReward(source, eventName)
     local identifier = Bridge.GetIdentifier(source)
     if not identifier then return end
 
+    -- Must actually be working. These events were claimable from anywhere with no
+    -- job active, so a crafted client could farm the rewards AFK on the cooldown.
+    local onJob = (ActiveBoatJobs and ActiveBoatJobs[source]) or (ActiveDockWorkers and ActiveDockWorkers[source])
+    if not onJob then
+        if Config.Debug then
+            print('^1[dps-maritime] event reward claim with no active job from ' .. tostring(source) .. '^0')
+        end
+        return
+    end
+
     -- Validate event identity - never grant for an unknown/spoofed name
     local reward = EventRewards[eventName]
     if not reward then

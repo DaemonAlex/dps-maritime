@@ -145,6 +145,17 @@ end)
 -- removed so only the garage-aware version (which enforces double-spawn
 -- prevention) is active.
 
+-- Client-supplied condition/fuel were written straight to the DB, and sellBoat
+-- pays price * SellBackPercent * (condition/100) - so condition=100000 sold a
+-- boat for 1000x its value. Clamp both to 0-100.
+local function clampPct(v)
+    v = tonumber(v)
+    if not v or v ~= v then return 0 end
+    if v < 0 then return 0 end
+    if v > 100 then return 100 end
+    return math.floor(v)
+end
+
 -----------------------------------------------------------
 -- STORE BOAT
 -----------------------------------------------------------
@@ -158,7 +169,7 @@ RegisterNetEvent('dps-maritime:server:storeBoat', function(boatId, fuel, conditi
 
     if not boat or boat.owner ~= identifier then return end
 
-    Database.UpdateBoatCondition(boatId, condition, fuel)
+    Database.UpdateBoatCondition(boatId, clampPct(condition), clampPct(fuel))
 
     Bridge.Notify(source, 'Success', 'Boat stored successfully', 'success')
 end)
@@ -603,7 +614,7 @@ RegisterNetEvent('dps-maritime:server:storeBoatWithGarage', function(boatId, fue
     if not boat or boat.owner ~= identifier then return end
 
     -- Update maritime database
-    Database.UpdateBoatCondition(boatId, condition, fuel)
+    Database.UpdateBoatCondition(boatId, clampPct(condition), clampPct(fuel))
 
     -- CRITICAL: Mark vehicle as STORED in garage system
     local plate = GarageBridge.GetBoatPlate(boatId)

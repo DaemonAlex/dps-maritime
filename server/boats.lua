@@ -7,7 +7,7 @@
 local Database = exports['dps-maritime']:GetDatabase()
 
 -- Active boat jobs
-local ActiveBoatJobs = {}
+ActiveBoatJobs = {}   -- resource-global: read by events.lua for the on-job gate
 
 -----------------------------------------------------------
 -- BOAT JOB MANAGEMENT
@@ -84,6 +84,19 @@ lib.callback.register('dps-maritime:server:requestBoatJob', function(source, boa
         end
     end
 
+    -- Remember what the SERVER approved. startBoatJob previously took the whole
+    -- payload from the client, so a crafted client could pick the highest-paying
+    -- (or hazmat/illegal) cargo, claim isTradedManifest for a free bonus, and
+    -- choose the longest port pair - bypassing every gate checked above.
+    PendingBoatJobs = PendingBoatJobs or {}
+    PendingBoatJobs[source] = {
+        boatModel = boatModel,      -- validated against Config.Boats + level above
+        cargoType = cargoType,      -- validated against Config.CargoTypes + hazmat above
+        manifestData = manifestData,
+        isTradedManifest = isTraded,
+        issuedAt = os.time(),
+    }
+
     return {
         success = true,
         boat = boat,
@@ -98,17 +111,46 @@ RegisterNetEvent('dps-maritime:server:startBoatJob', function(data)
     local identifier = Bridge.GetIdentifier(source)
     if not identifier then return end
 
+    -- Only start a job the server actually approved in requestBoatJob, and use
+    -- ITS values - not the client's - for everything that affects pay.
+    -- Only start a job the server actually approved in requestBoatJob, and take
+    -- boat/cargo/manifest from ITS record. Previously the whole payload came from
+    -- the client, so a crafted client could pick the highest-paying or hazmat
+    -- cargo and claim a free traded-manifest bonus, bypassing every level and
+    -- hazmat gate checked in requestBoatJob.
+    local approved = PendingBoatJobs and PendingBoatJobs[source]
+    if not approved then return end
+    PendingBoatJobs[source] = nil
+
+    data = data or {}
+
+    -- Ports are chosen at start time, so validate them rather than trust them
+    local startPort, endPort = data.startPort, data.endPort
+    if not Config.Ports[startPort] and not (Config.DeepSeaPorts and Config.DeepSeaPorts[startPort]) then return end
+    if not Config.Ports[endPort] and not (Config.DeepSeaPorts and Config.DeepSeaPorts[endPort]) then return end
+    if startPort == endPort then return end
+
     ActiveBoatJobs[source] = {
         identifier = identifier,
-        boatModel = data.boatModel,
-        cargoType = data.cargoType,
-        startPort = data.startPort,
-        endPort = data.endPort,
+        boatModel = approved.boatModel,
+        cargoType = approved.cargoType,
+        startPort = startPort,
+        endPort = endPort,
         startTime = os.time(),
         startCoords = data.startCoords,
-        -- Manifest data for trade bonus
-        manifestData = data.manifestData,
-        isTradedManifest = data.isTradedManifest or false,
+        -- Manifest data for trade bonus (server-side, from the approved offer)
+        manifestData = approved.manifestData,
+        isTradedManifest = approved.isTradedManifest or false,
+    }
+
+    -- the rest of this handler reads the authoritative values
+    data = {
+        boatModel = approved.boatModel,
+        cargoType = approved.cargoType,
+        startPort = startPort,
+        endPort = endPort,
+        isTradedManifest = approved.isTradedManifest or false,
+        startCoords = data.startCoords,
     }
 
     -- Register with security system for validation on completion
@@ -331,6 +373,16 @@ end)
 
 lib.callback.register('dps-maritime:server:refuelBoat', function(source, boatNetId, amount)
     if not Bridge.GetPlayer(source) then return false end
+
+    -- Clamp the client-supplied amount: a negative value made cost negative, which
+    -- passed the funds check and called RemoveMoney with a negative (credit on
+    -- frameworks that don't reject it), and an arbitrary amount let the player
+    -- name their own refuel price.
+    amount = tonumber(amount)
+    if not amount or amount ~= amount or amount <= 0 then
+        return { error = 'Invalid fuel amount' }
+    end
+    amount = math.min(math.floor(amount), 100)
 
     local cost = amount * Config.BoatDelivery.FuelPricePerLiter
 

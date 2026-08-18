@@ -870,7 +870,7 @@ local function TriggerEngineStutter(vehicle)
     end)
 end
 
-local function StartFuelMonitor()
+function StartFuelMonitor()  -- global: called earlier in this file
     if FuelMonitorThread then return end
 
     FuelMonitorThread = CreateThread(function()
@@ -960,7 +960,7 @@ local function StartFuelMonitor()
     end)
 end
 
-local function StopFuelMonitor()
+function StopFuelMonitor()  -- global: called earlier in this file
     FuelMonitorThread = nil
     FuelStutterActive = false
     LastFuelWarning = 0

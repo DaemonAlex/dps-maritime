@@ -204,9 +204,11 @@ local function StartWeatherZoneMonitor()
         while true do
             if ZoneEntered and ActiveWeatherZone then
                 Wait(0)
-                -- Keep weather persistent while in zone
-                if ActiveWeatherZone.weatherType then
-                    SetWeatherTypePersist(ActiveWeatherZone.weatherType)
+                -- Re-read after the frame yield: the zone-exit loop can nil
+                -- ActiveWeatherZone during that exact frame (was a crash)
+                local zone = ActiveWeatherZone
+                if zone and zone.weatherType then
+                    SetWeatherTypePersist(zone.weatherType)
                 end
             else
                 Wait(500)

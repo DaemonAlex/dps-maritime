@@ -2,185 +2,141 @@
     dps-maritime - Jetsam Company
     Server-Side Event Handlers
 
-    Handles rewards and validation for random sea events
+    Handles rewards and validation for random sea events.
+
+    SECURITY MODEL (fixes the old money/XP printer):
+    - These events ARE legitimately client-initiated (the client detects a world
+      event and requests its reward), so the net events stay reachable BUT:
+        (a) the reward is RECOMPUTED SERVER-SIDE from the event identity - the
+            client-supplied cash/xp values are ignored entirely.
+        (b) a REAL per-player, per-event cooldown aborts (returns) BEFORE any
+            grant if the player is on cooldown for that event.
+        (c) unknown / spoofed event names grant nothing.
+    - The old dead second "rate limit" AddEventHandler (which could only print,
+      never abort the grant) has been removed.
 ]]
 
+local Database = exports['dps-maritime']:GetDatabase()
+
 -----------------------------------------------------------
--- EVENT XP REWARD
+-- SERVER-AUTHORITATIVE REWARD TABLE
+-- Keyed by the event name the client sends (see client/events.lua). Cash is
+-- rolled server-side within these bounds; XP is fixed. The client never gets to
+-- choose the amount.
 -----------------------------------------------------------
 
-RegisterNetEvent('dps-maritime:server:awardEventXP', function(xp, eventName)
-    local source = source
+local EventRewards = {
+    -- awardEventXP (XP only)
+    ['Wildlife Sighting'] = { xp = 25,  cashMin = 0,    cashMax = 0 },
+    -- awardEventReward (cash + XP)
+    ['Rescue Mission']    = { xp = 150, cashMin = 1500, cashMax = 3000 }, -- distress_signal
+    ['Salvage Bonus']     = { xp = 50,  cashMin = 500,  cashMax = 1500 }, -- floating_cargo
+}
+
+-- Per-player, per-event cooldown (ms). Prevents farming a single event.
+local REWARD_COOLDOWN = 60000 -- 1 minute per event per player
+
+-- [identifier] = { [eventName] = lastGrantGameTimer }
+local EventCooldowns = {}
+
+-----------------------------------------------------------
+-- REWARD GRANT (single authoritative path)
+-----------------------------------------------------------
+
+local function GrantEventReward(source, eventName)
     local identifier = Bridge.GetIdentifier(source)
-
     if not identifier then return end
 
-    -- Validate XP amount (anti-cheat)
-    if type(xp) ~= 'number' or xp < 0 or xp > 500 then
-        print('^1[dps-maritime] Invalid event XP claim from ' .. source .. ': ' .. tostring(xp) .. '^0')
+    -- Validate event identity - never grant for an unknown/spoofed name
+    local reward = EventRewards[eventName]
+    if not reward then
+        if Config.Debug then
+            print('^1[dps-maritime] Unknown event reward claim from ' .. source .. ': ' .. tostring(eventName) .. '^0')
+        end
         return
     end
 
-    -- Award XP
-    local db = exports['dps-maritime']:GetDatabase()
-    if not db then return end
+    -- Real per-player, per-event cooldown. ABORT BEFORE granting anything.
+    local now = GetGameTimer()
+    EventCooldowns[identifier] = EventCooldowns[identifier] or {}
+    local last = EventCooldowns[identifier][eventName]
+    if last and (now - last) < REWARD_COOLDOWN then
+        if Config.Debug then
+            print('^3[dps-maritime] Event reward on cooldown for ' .. source .. ' (' .. eventName .. ')^0')
+        end
+        return
+    end
+    EventCooldowns[identifier][eventName] = now
 
-    local playerData = db.GetPlayerData(identifier)
-    if not playerData then return end
+    -- Recompute reward SERVER-SIDE (ignore any client-supplied amounts)
+    local cash = 0
+    if reward.cashMax and reward.cashMax > 0 then
+        cash = math.random(reward.cashMin, reward.cashMax)
+    end
+    local xp = reward.xp or 0
 
-    local newXP = playerData.xp + xp
-    local newLevel = Config.GetLevelFromXP(newXP)
+    -- Grant cash via the Bridge (server-authoritative)
+    if cash > 0 then
+        Bridge.AddMoney(source, 'bank', cash, 'Maritime Event: ' .. eventName)
+        Database.AddEarnings(identifier, cash)
+    end
 
-    db.UpdateXP(identifier, newXP)
+    -- Grant XP through the canonical internal XP path (handles level-up,
+    -- persistence, state bags and the client updateXP event). This replaces the
+    -- old calls to the nonexistent db.UpdateXP/db.UpdateLevel/db.UpdateEarnings.
+    if xp > 0 then
+        exports['dps-maritime']:AddMaritimeXP(source, xp)
+    end
 
-    -- Check for level up
-    if newLevel > playerData.level then
-        db.UpdateLevel(identifier, newLevel)
-
-        -- Notify player
-        Bridge.Notify(source, {
-            title = 'Level Up!',
-            description = 'You are now Level ' .. newLevel .. ': ' .. Config.GetLevelData(newLevel).title,
-            type = 'success',
-            duration = 8000,
-        })
-
-        -- Sync state bags
-        local player = Player(source)
-        player.state:set('maritimeLevel', newLevel, true)
-        player.state:set('maritimeXP', newXP, true)
-        player.state:set('maritimeTitle', Config.GetLevelData(newLevel).title, true)
+    -- Notify (correct Bridge.Notify signature: source, title, message, type, duration)
+    local msg
+    if cash > 0 then
+        msg = string.format('%s: +%s +%d XP', eventName, Maritime.FormatMoney(cash), xp)
     else
-        -- Just update XP state
-        local player = Player(source)
-        player.state:set('maritimeXP', newXP, true)
+        msg = string.format('%s: +%d XP', eventName, xp)
     end
-
-    -- Trigger XP update event for dashboard
-    TriggerClientEvent('dps-maritime:client:updateXP', source, {
-        xp = newXP,
-        level = newLevel,
-    })
+    Bridge.Notify(source, 'Maritime Event', msg, 'success', 6000)
 
     if Config.Debug then
-        print('^3[dps-maritime] ' .. source .. ' awarded ' .. xp .. ' XP for event: ' .. (eventName or 'Unknown') .. '^0')
+        print('^3[dps-maritime] ' .. source .. ' event reward "' .. eventName .. '": $' .. cash .. ' + ' .. xp .. ' XP^0')
     end
+end
+
+-----------------------------------------------------------
+-- NET EVENTS (client-initiated, server-validated)
+-- Client-supplied amounts are intentionally ignored - only the event name is
+-- used, and the reward is recomputed above.
+-----------------------------------------------------------
+
+RegisterNetEvent('dps-maritime:server:awardEventXP', function(_clientXp, eventName)
+    GrantEventReward(source, eventName)
+end)
+
+RegisterNetEvent('dps-maritime:server:awardEventReward', function(_clientCash, _clientXp, eventName)
+    GrantEventReward(source, eventName)
 end)
 
 -----------------------------------------------------------
--- EVENT CASH + XP REWARD
+-- COOLDOWN CLEANUP
 -----------------------------------------------------------
 
-RegisterNetEvent('dps-maritime:server:awardEventReward', function(cash, xp, eventName)
-    local source = source
-    local identifier = Bridge.GetIdentifier(source)
-
-    if not identifier then return end
-
-    -- Validate amounts (anti-cheat)
-    if type(cash) ~= 'number' or cash < 0 or cash > 10000 then
-        print('^1[dps-maritime] Invalid event cash claim from ' .. source .. ': ' .. tostring(cash) .. '^0')
-        return
-    end
-
-    if type(xp) ~= 'number' or xp < 0 or xp > 500 then
-        print('^1[dps-maritime] Invalid event XP claim from ' .. source .. ': ' .. tostring(xp) .. '^0')
-        return
-    end
-
-    -- Award cash
-    Bridge.AddMoney(source, 'bank', cash, 'Maritime Event: ' .. (eventName or 'Bonus'))
-
-    -- Award XP
-    local db = exports['dps-maritime']:GetDatabase()
-    if not db then return end
-
-    local playerData = db.GetPlayerData(identifier)
-    if not playerData then return end
-
-    local newXP = playerData.xp + xp
-    local newLevel = Config.GetLevelFromXP(newXP)
-
-    db.UpdateXP(identifier, newXP)
-
-    -- Update total earnings
-    local newEarnings = (playerData.total_earnings or 0) + cash
-    db.UpdateEarnings(identifier, newEarnings)
-
-    -- Check for level up
-    if newLevel > playerData.level then
-        db.UpdateLevel(identifier, newLevel)
-
-        Bridge.Notify(source, {
-            title = 'Level Up!',
-            description = 'You are now Level ' .. newLevel .. ': ' .. Config.GetLevelData(newLevel).title,
-            type = 'success',
-            duration = 8000,
-        })
-    end
-
-    -- Sync state bags
-    local player = Player(source)
-    player.state:set('maritimeLevel', newLevel, true)
-    player.state:set('maritimeXP', newXP, true)
-    player.state:set('maritimeTitle', Config.GetLevelData(newLevel).title, true)
-
-    -- Trigger XP update event for dashboard
-    TriggerClientEvent('dps-maritime:client:updateXP', source, {
-        xp = newXP,
-        level = newLevel,
-    })
-
-    if Config.Debug then
-        print('^3[dps-maritime] ' .. source .. ' awarded $' .. cash .. ' + ' .. xp .. ' XP for event: ' .. (eventName or 'Unknown') .. '^0')
-    end
-end)
-
------------------------------------------------------------
--- RATE LIMITING FOR EVENT REWARDS
------------------------------------------------------------
-
-local EventRewardCooldowns = {}
-local REWARD_COOLDOWN = 60000 -- 1 minute between event rewards
-
--- Cleanup old cooldowns
 CreateThread(function()
     while true do
         Wait(300000) -- Every 5 minutes
 
         local now = GetGameTimer()
-        for source, lastTime in pairs(EventRewardCooldowns) do
-            if (now - lastTime) > REWARD_COOLDOWN * 2 then
-                EventRewardCooldowns[source] = nil
+        for identifier, events in pairs(EventCooldowns) do
+            local anyActive = false
+            for eventName, lastTime in pairs(events) do
+                if (now - lastTime) > REWARD_COOLDOWN * 2 then
+                    events[eventName] = nil
+                else
+                    anyActive = true
+                end
+            end
+            if not anyActive then
+                EventCooldowns[identifier] = nil
             end
         end
-    end
-end)
-
--- Wrap the reward events with rate limiting
-local function CheckEventCooldown(source)
-    local now = GetGameTimer()
-    local lastReward = EventRewardCooldowns[source]
-
-    if lastReward and (now - lastReward) < REWARD_COOLDOWN then
-        return false
-    end
-
-    EventRewardCooldowns[source] = now
-    return true
-end
-
--- Override the events to add rate limiting
-AddEventHandler('dps-maritime:server:awardEventXP', function(xp, eventName)
-    local source = source
-    if not CheckEventCooldown(source) then
-        print('^1[dps-maritime] Rate limited event XP claim from ' .. source .. '^0')
-    end
-end)
-
-AddEventHandler('dps-maritime:server:awardEventReward', function(cash, xp, eventName)
-    local source = source
-    if not CheckEventCooldown(source) then
-        print('^1[dps-maritime] Rate limited event reward claim from ' .. source .. '^0')
     end
 end)

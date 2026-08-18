@@ -50,15 +50,17 @@ lib.callback.register('dps-maritime:server:requestBoatJob', function(source, boa
 
     if Config.Manifest and Config.Manifest.Enabled and Config.Manifest.RequireForBoatDelivery then
         if level >= Config.Manifest.MinLevelToRequire then
-            -- Check if player has a cargo manifest
-            local manifestItem = exports[Config.Inventory]:GetItemByName(source, Config.Manifest.ItemName)
+            -- Check if player has a cargo manifest (H5: ox has no GetItemByName;
+            -- use the Bridge slot search which returns { slot, count, metadata }).
+            local manifestSlots = Bridge.Inventory.GetItemSlots(source, Config.Manifest.ItemName)
+            local manifestItem = manifestSlots and manifestSlots[1]
 
             if not manifestItem then
                 return { error = 'You need a Cargo Manifest from a dock worker to start a delivery' }
             end
 
             -- Get manifest metadata
-            manifestData = manifestItem.info or manifestItem.metadata
+            manifestData = manifestItem.metadata or manifestItem.info
 
             -- Validate manifest
             local valid, errorMsg = exports['dps-maritime']:ValidateManifest(manifestData)
@@ -67,12 +69,12 @@ lib.callback.register('dps-maritime:server:requestBoatJob', function(source, boa
             end
 
             -- Check if manifest was created by someone else (trade bonus)
-            if manifestData.createdBy and manifestData.createdBy ~= identifier then
+            if manifestData and manifestData.createdBy and manifestData.createdBy ~= identifier then
                 isTraded = true
             end
 
-            -- Remove the manifest from inventory (consumed on job start)
-            exports[Config.Inventory]:RemoveItem(source, Config.Manifest.ItemName, 1, manifestItem.slot)
+            -- Remove the manifest from inventory (consumed on job start), by slot
+            Bridge.Inventory.RemoveItem(source, Config.Manifest.ItemName, 1, nil, manifestItem.slot)
 
             TriggerClientEvent('ox_lib:notify', source, {
                 title = 'Manifest Accepted',
@@ -267,62 +269,22 @@ RegisterNetEvent('dps-maritime:server:illegalCargoAlert', function(coords)
             },
         }
 
-        -- ps-dispatch integration
-        TriggerEvent('ps-dispatch:server:notify', {
-            dispatchcodename = 'maritimesmuggling',
-            dispatchCode = '10-31',
-            firstStreet = 'Ocean',
-            gender = false,
-            model = nil,
-            plate = nil,
-            priority = 2,
-            firstColor = nil,
-            automaticGunfire = false,
-            origin = {
-                x = coords.x,
-                y = coords.y,
-                z = coords.z,
-            },
-            dispatchMessage = 'Suspected maritime smuggling activity',
-            job = { 'police', 'sheriff', 'coastguard' },
-        })
-
-        -- cd_dispatch integration
-        TriggerEvent('cd_dispatch:AddNotification', {
-            job_table = { 'police', 'sheriff' },
-            coords = coords,
-            title = '10-31 - Maritime Smuggling',
-            message = 'Suspicious vessel spotted with potential contraband',
-            flash = 1,
-            unique_id = tostring(source),
-            blip = {
-                sprite = 427,
-                scale = 1.2,
-                colour = 1,
-                flashes = true,
-                text = 'Maritime Smuggling',
-                time = 300,
-                radius = 0,
-            },
-        })
-
-        -- qs-dispatch integration
-        TriggerEvent('qs-dispatch:server:CreateDispatchCall', {
-            job = 'police',
-            callLocation = coords,
-            callCode = { code = '10-31', snippet = 'Maritime Smuggling' },
-            message = 'Suspicious vessel spotted carrying contraband',
-            flashes = true,
-            image = nil,
-            blip = {
-                sprite = 427,
-                scale = 1.0,
-                colour = 1,
-                flashes = true,
-                text = 'Maritime Smuggling',
-                time = (5 * 60 * 1000),
-            },
-        })
+        -- wasabi_mdt (MDT & Dispatch System V2) - the dispatch this server runs
+        if GetResourceState('wasabi_mdt') == 'started' then
+            local ok, err = pcall(function()
+                exports['wasabi_mdt']:CreateDispatch({
+                    type = 'disturbance',
+                    title = '10-31 - Maritime Smuggling',
+                    description = 'Suspicious vessel spotted with potential contraband',
+                    code = '10-31',
+                    location = 'Ocean',
+                    coords = { x = coords.x, y = coords.y, z = coords.z },
+                    priority = 2,
+                    senderName = 'Coastal Watch',
+                })
+            end)
+            if not ok then print(('[dps-maritime] wasabi_mdt dispatch error: %s'):format(tostring(err))) end
+        end
 
         -- Create visible blip for all police on duty
         TriggerClientEvent('dps-maritime:client:createPoliceBlip', -1, {
@@ -522,6 +484,7 @@ lib.callback.register('dps-maritime:server:requestVIPMission', function(source, 
 end)
 
 lib.callback.register('dps-maritime:server:completeVIPMission', function(source, data)
+    data = data or {}
     local identifier = Bridge.GetIdentifier(source)
     if not identifier then return nil end
 
@@ -549,14 +512,32 @@ lib.callback.register('dps-maritime:server:completeVIPMission', function(source,
     basePay = basePay * (missionType.payMultiplier or 1.0)
     basePay = basePay * levelData.payMultiplier
 
-    -- Check if on time
-    local onTime = data.elapsedTime <= missionType.timeLimit
+    -- M2: server-side validation. Do NOT trust client-reported metrics that
+    -- previously guaranteed max pay+tip.
+    -- Elapsed time is derived from the server's own mission.startTime, never
+    -- from data.elapsedTime.
+    local elapsedTime = os.time() - mission.startTime
+
+    -- Minimum-duration sanity check (mirrors the Security module's MinJobDuration
+    -- intent): reject instant/teleport completions used to farm guaranteed pay.
+    if elapsedTime < 15 then
+        ActiveVIPMissions[source] = nil
+        return { error = 'Mission completed suspiciously fast' }
+    end
+
+    -- Clamp client-supplied quality metrics to sane ranges so they cannot be
+    -- spoofed into free money.
+    local collisions = math.max(0, math.floor(tonumber(data.collisions) or 0))
+    local satisfaction = math.min(1.0, math.max(0.0, tonumber(data.satisfaction) or 0))
+
+    -- Check if on time (server elapsed vs the mission time limit)
+    local onTime = elapsedTime <= missionType.timeLimit
     if not onTime then
         basePay = basePay * (1 - Config.VIPTransport.BadServicePenalty)
     end
 
     -- Collision penalty
-    if data.collisions and data.collisions > 2 then
+    if collisions > 2 then
         basePay = basePay * 0.8 -- 20% penalty for rough ride
     end
 
@@ -564,7 +545,7 @@ lib.callback.register('dps-maritime:server:completeVIPMission', function(source,
 
     -- Calculate tip
     local tip = 0
-    local tipChance = Config.VIPTransport.TipChance + (data.satisfaction or 0)
+    local tipChance = Config.VIPTransport.TipChance + satisfaction
 
     if math.random() < tipChance then
         local minTip = Config.VIPTransport.TipRange.min
@@ -582,8 +563,13 @@ lib.callback.register('dps-maritime:server:completeVIPMission', function(source,
     xp = xp * (1 + (destination.xpBonus or 0))
     xp = math.floor(xp)
 
-    -- Pay player
-    Player.Functions.AddMoney('bank', pay + tip, 'vip-transport')
+    -- Pay player (H2: Player was an undefined global; route through the Bridge)
+    local Player = Bridge.GetPlayer(source)
+    if not Player then
+        ActiveVIPMissions[source] = nil
+        return { error = 'Player not found' }
+    end
+    Bridge.AddMoney(source, 'bank', pay + tip, 'vip-transport')
 
     -- Log delivery
     Database.LogDelivery({

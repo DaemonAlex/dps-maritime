@@ -97,9 +97,12 @@ RegisterNetEvent('dps-maritime:server:startDockJob', function(zoneId)
         return
     end
 
-    -- Charge rental fee
-    local cash = Player.PlayerData.money.cash
-    local bank = Player.PlayerData.money.bank
+    -- Charge rental fee (H2: Player was previously an undefined global)
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return end
+
+    local cash = Bridge.GetMoney(source, 'cash')
+    local bank = Bridge.GetMoney(source, 'bank')
     local rentalFee = Config.DockWork.TruckRentalFee
 
     if cash < rentalFee and bank < rentalFee then
@@ -111,7 +114,7 @@ RegisterNetEvent('dps-maritime:server:startDockJob', function(zoneId)
     end
 
     local paymentMethod = cash >= rentalFee and 'cash' or 'bank'
-    Player.Functions.RemoveMoney(paymentMethod, rentalFee, 'dock-truck-rental')
+    Bridge.RemoveMoney(source, paymentMethod, rentalFee, 'dock-truck-rental')
 
     -- Generate dock manifest if ManifestMode is enabled
     local manifest = nil
@@ -187,7 +190,7 @@ end)
 -- CONTAINER DELIVERY
 -----------------------------------------------------------
 
-RegisterNetEvent('dps-maritime:server:containerDelivered', function(containerType)
+RegisterNetEvent('dps-maritime:server:containerDelivered', function(clientContainerType)
     local source = source
     local worker = ActiveDockWorkers[source]
     if not worker then return end
@@ -195,6 +198,22 @@ RegisterNetEvent('dps-maritime:server:containerDelivered', function(containerTyp
     local identifier = Bridge.GetIdentifier(source)
     if not identifier then return end
     local level = exports['dps-maritime']:GetPlayerMaritimeLevel(source)
+
+    -- M1: derive the container type SERVER-SIDE from the active manifest entry
+    -- the server generated. In manifest mode the client cannot pick a
+    -- higher-paying cargo type - pay is computed from the next uncompleted
+    -- container the server assigned. (Legacy non-manifest mode has no
+    -- server-tracked type; CalculateDockPay falls back to 'standard_container'
+    -- for any unrecognised value.)
+    local containerType = clientContainerType
+    if worker.manifest and Config.DockWork.ManifestMode and Config.DockWork.ManifestMode.Enabled then
+        for _, container in ipairs(worker.manifest.containers) do
+            if not container.completed then
+                containerType = container.type
+                break
+            end
+        end
+    end
 
     -- Calculate base pay and XP
     local pay = Maritime.CalculateDockPay(containerType, level)
@@ -318,8 +337,10 @@ RegisterNetEvent('dps-maritime:server:containerDelivered', function(containerTyp
                 local manifestData = GenerateCargoManifest(identifier, containerType, worker.containersDelivered)
 
                 if manifestData then
-                    -- Add manifest item to player inventory
-                    local success = exports[Config.Inventory]:AddItem(source, Config.Manifest.ItemName, 1, false, manifestData)
+                    -- Add manifest item to player inventory (H5: route through the
+                    -- Bridge with the correct ox signature - metadata as 4th arg,
+                    -- not the old AddItem(src,item,1,false,metadata) qb/qs form).
+                    local success = Bridge.Inventory.AddItem(source, Config.Manifest.ItemName, 1, manifestData)
 
                     if success then
                         manifestGenerated = true
@@ -461,11 +482,25 @@ lib.callback.register('dps-maritime:server:getContainers', function(source)
     return SpawnedContainers
 end)
 
--- Load containers on resource start
+-- Load containers on resource start.
+-- H6: replaced the fragile fixed Wait(1000) (which raced the remote DB on this
+-- box) with a pcall-retry loop that retries the query until it succeeds or a
+-- bounded number of attempts is exhausted.
 CreateThread(function()
-    Wait(1000) -- Wait for database to be ready
+    local containers
+    local attempts = 0
+    local maxAttempts = 15
 
-    local containers = Database.GetAllContainers()
+    repeat
+        attempts = attempts + 1
+        local ok, result = pcall(Database.GetAllContainers)
+        if ok and result then
+            containers = result
+        else
+            Wait(1000) -- DB not ready yet; back off and retry
+        end
+    until containers or attempts >= maxAttempts
+
     if containers then
         for _, container in ipairs(containers) do
             SpawnedContainers[container.id] = {
@@ -478,6 +513,8 @@ CreateThread(function()
             }
         end
         Maritime.Debug('Loaded ' .. #containers .. ' containers from database')
+    else
+        print('^1[dps-maritime] Failed to load containers from database after ' .. attempts .. ' attempts^0')
     end
 end)
 

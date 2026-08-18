@@ -525,7 +525,10 @@ local function GetPlayerLevelTier(level)
 end
 
 local function IsCargoIllegal()
-    local jobData = exports['dps-maritime']:GetCurrentBoatJob and exports['dps-maritime']:GetCurrentBoatJob()
+    local ok, jobData = pcall(function()
+        return exports['dps-maritime']:GetCurrentBoatJob()
+    end)
+    if not ok then jobData = nil end
     if not jobData then return false end
 
     local cargoType = jobData.cargoType

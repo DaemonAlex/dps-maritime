@@ -9,7 +9,7 @@ game 'gta5'
 name 'dps-maritime'
 author 'DPS Development'
 description 'Jetsam Maritime Logistics - Container hauling and boat delivery job with progression'
-version '1.5.0'
+version '1.6.0'
 repository 'https://github.com/DaemonAlex/dps-maritime'
 
 lua54 'yes'
@@ -80,7 +80,11 @@ dependencies {
     'ox_lib',
     'oxmysql',
     'ox_target',
-    'dps-maritime-maps', -- Map assets (warehouse, dock props, port exterior)
+    -- NOTE: 'dps-maritime-maps' is an OPTIONAL MLO (warehouse, dock props, port
+    -- exterior) and is intentionally NOT a hard dependency. It is not installed
+    -- on this box, and listing it here blocks startup ("dependency
+    -- dps-maritime-maps not started"). The job runs fully without the MLO -
+    -- dock/boat locations come from config, not the map resource.
 }
 
 -- This resource provides these exports

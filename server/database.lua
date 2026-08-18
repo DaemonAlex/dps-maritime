@@ -65,6 +65,14 @@ function Database.UpdateStreak(identifier, streak)
     ]], { streak, identifier })
 end
 
+-- Add to total_earnings without touching delivery counts (used for event bonuses)
+function Database.AddEarnings(identifier, amount)
+    if not amount or amount <= 0 then return end
+    MySQL.update.await([[
+        UPDATE maritime_players SET total_earnings = total_earnings + ? WHERE identifier = ?
+    ]], { amount, identifier })
+end
+
 -----------------------------------------------------------
 -- DELIVERY HISTORY
 -----------------------------------------------------------
@@ -142,7 +150,7 @@ function Database.AddBoatToFleet(identifier, boatModel, boatName)
     local plate = Database.GenerateBoatPlate()
 
     local id = MySQL.insert.await([[
-        INSERT INTO maritime_fleet (owner, model, name, plate, fuel, condition, is_spawned, is_impounded)
+        INSERT INTO maritime_fleet (owner, model, name, plate, fuel, `condition`, is_spawned, is_impounded)
         VALUES (?, ?, ?, ?, ?, 100, 0, 0)
     ]], { identifier, boatModel, boatName, plate, boat.fuelCapacity })
 
@@ -157,7 +165,7 @@ end
 
 function Database.UpdateBoatCondition(boatId, condition, fuel)
     MySQL.update.await([[
-        UPDATE maritime_fleet SET condition = ?, fuel = ? WHERE id = ?
+        UPDATE maritime_fleet SET `condition` = ?, fuel = ? WHERE id = ?
     ]], { condition, fuel, boatId })
 end
 
@@ -204,7 +212,7 @@ end
 function Database.RecoverFromImpound(boatId, newCondition, newFuel)
     MySQL.update.await([[
         UPDATE maritime_fleet
-        SET is_impounded = 0, impound_time = NULL, condition = ?, fuel = ?
+        SET is_impounded = 0, impound_time = NULL, `condition` = ?, fuel = ?
         WHERE id = ?
     ]], { newCondition, newFuel, boatId })
 end

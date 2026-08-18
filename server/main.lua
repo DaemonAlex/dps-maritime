@@ -239,7 +239,12 @@ end)
 -- PAYMENT
 -----------------------------------------------------------
 
-RegisterNetEvent('dps-maritime:server:payout', function(amount, jobType, details)
+-- SERVER-ONLY event. Uses AddEventHandler (NOT RegisterNetEvent) so it is
+-- unreachable from clients - only server-side TriggerEvent (dock.lua,
+-- boats.lua) can fire it. This closes the money-printer exploit where a client
+-- could spoof an arbitrary `amount`. The `source` global propagates through
+-- server->server TriggerEvent from the originating net-event handler.
+AddEventHandler('dps-maritime:server:payout', function(amount, jobType, details)
     local source = source
     local identifier = GetPlayerIdentifier(source)
     if not identifier then return end
@@ -268,7 +273,10 @@ RegisterNetEvent('dps-maritime:server:payout', function(amount, jobType, details
     Bridge.Notify(source, 'Jetsam Maritime', 'Payment received: ' .. Maritime.FormatMoney(amount), 'success')
 end)
 
-RegisterNetEvent('dps-maritime:server:addXP', function(amount)
+-- SERVER-ONLY event (AddEventHandler, not RegisterNetEvent). Only server-side
+-- TriggerEvent callers (dock.lua, boats.lua) can reach it; clients cannot spoof
+-- XP. `source` propagates from the originating net-event handler.
+AddEventHandler('dps-maritime:server:addXP', function(amount)
     local source = source
     AddXP(source, amount)
 end)
@@ -326,26 +334,10 @@ Bridge.RegisterCommand('setmaritimelevel', 'Set maritime level (Admin)', {
     Bridge.Notify(source, 'Success', 'Set player maritime level to ' .. level, 'success')
 end, 'admin')
 
-Bridge.RegisterCommand('maritimestats', 'View maritime stats', {}, false, function(source)
-    local data = PlayerData[source]
-    if not data then
-        data = LoadPlayerData(source)
-    end
-
-    if not data then return end
-
-    local levelData = Config.GetLevelData(data.level)
-
-    Bridge.Notify(source, 'Maritime Stats', string.format(
-        'Level %d (%s)\nXP: %d\nBoat Deliveries: %d\nDock Deliveries: %d\nTotal Earnings: %s',
-        data.level,
-        levelData.title,
-        data.xp,
-        data.boat_deliveries or 0,
-        data.dock_deliveries or 0,
-        Maritime.FormatMoney(data.total_earnings or 0)
-    ), 'inform', 10000)
-end)
+-- M6: the server-side text `/maritimestats` command was removed. It collided
+-- with the client NUI dashboard command of the same name (client/dashboard.lua),
+-- which is the version we keep. Use /maritimestats, /maritimedash or /mstats to
+-- open the visual dashboard.
 
 -----------------------------------------------------------
 -- INVENTORY CALLBACK (for Bridge.Inventory.HasItem on client)

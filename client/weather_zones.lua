@@ -1,3 +1,16 @@
+-- SetFogDensity is not a FiveM native; emulate with a timecycle modifier
+local fogTcActive = false
+local function SetFogDensity(intensity)
+    if intensity and intensity > 0.01 then
+        SetTimecycleModifier('prologue_ending_fog')
+        SetTimecycleModifierStrength(math.min(intensity, 1.0))
+        fogTcActive = true
+    elseif fogTcActive then
+        ClearTimecycleModifier()
+        fogTcActive = false
+    end
+end
+
 --[[
     dps-maritime - Jetsam Company
     Weather Zones System

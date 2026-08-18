@@ -175,7 +175,7 @@ function StartManifestTimer()
             Wait(1000)
 
             -- Calculate remaining time
-            local elapsed = os.time() - CurrentManifest.startTime
+            local elapsed = GetCloudTimeAsInt() - CurrentManifest.startTime
             local remaining = CurrentManifest.timeLimit - elapsed
 
             -- Update TextUI with manifest progress

@@ -525,8 +525,7 @@ CreateThread(function()
 
                     if vehicle and vehicle == SpawnedBoat then
                         -- Show delivery prompt
-                        lib.showTextUI('[E] Complete Delivery', {
-                            position = 'right-center',
+                        lib.showTextUI('[E] Complete Delivery', { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'right-center',
                         })
 
                         if IsControlJustPressed(0, 38) then -- E key
@@ -870,7 +869,7 @@ local function TriggerEngineStutter(vehicle)
     end)
 end
 
-local function StartFuelMonitor()
+function StartFuelMonitor()  -- global: called earlier in this file
     if FuelMonitorThread then return end
 
     FuelMonitorThread = CreateThread(function()
@@ -902,8 +901,7 @@ local function StartFuelMonitor()
                     end
 
                     -- Show rescue option
-                    lib.showTextUI('[G] Call Rescue (' .. Maritime.FormatMoney(Config.FuelEnforcement.RescueCost) .. ')', {
-                        position = 'right-center',
+                    lib.showTextUI('[G] Call Rescue (' .. Maritime.FormatMoney(Config.FuelEnforcement.RescueCost) .. ')', { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'right-center',
                         icon = 'ship',
                     })
 
@@ -960,7 +958,7 @@ local function StartFuelMonitor()
     end)
 end
 
-local function StopFuelMonitor()
+function StopFuelMonitor()  -- global: called earlier in this file
     FuelMonitorThread = nil
     FuelStutterActive = false
     LastFuelWarning = 0

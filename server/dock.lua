@@ -7,7 +7,7 @@
 local Database = exports['dps-maritime']:GetDatabase()
 
 -- Active dock workers
-local ActiveDockWorkers = {}
+ActiveDockWorkers = {}   -- resource-global: read by events.lua for the on-job gate
 
 -- Spawned containers (synced)
 local SpawnedContainers = {}
@@ -190,10 +190,22 @@ end)
 -- CONTAINER DELIVERY
 -----------------------------------------------------------
 
+local containerDeliveryCooldown = {}
+
 RegisterNetEvent('dps-maritime:server:containerDelivered', function(clientContainerType)
     local source = source
     local worker = ActiveDockWorkers[source]
     if not worker then return end
+
+    -- Minimum time per container. Without this the event could be spammed in a
+    -- tight loop, completing an entire manifest in under a second and collecting
+    -- full pay, XP, the fast-completion time bonus and tradeable manifests.
+    local now = GetGameTimer()
+    local minGap = (Config.DockWork and Config.DockWork.MinSecondsPerContainer or 10) * 1000
+    if containerDeliveryCooldown[source] and (now - containerDeliveryCooldown[source]) < minGap then
+        return
+    end
+    containerDeliveryCooldown[source] = now
 
     local identifier = Bridge.GetIdentifier(source)
     if not identifier then return end
@@ -464,6 +476,10 @@ end)
 
 RegisterNetEvent('dps-maritime:server:removeContainer', function(containerId)
     local source = source
+
+    -- Must be an on-duty dock worker: any client could previously wipe every
+    -- placed container from the DB and all clients as a grief.
+    if not ActiveDockWorkers[source] then return end
 
     if SpawnedContainers[containerId] then
         Database.DeleteContainer(containerId)

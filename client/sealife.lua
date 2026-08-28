@@ -371,8 +371,7 @@ local function DrawDepthMeter(depth, minDepth, isShallow)
         end
 
         if not depthTextUIShown then
-            lib.showTextUI(text, {
-                position = 'right-center',
+            lib.showTextUI(text, { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'right-center',
                 icon = icon,
                 style = {
                     borderRadius = 5,
@@ -382,8 +381,7 @@ local function DrawDepthMeter(depth, minDepth, isShallow)
             depthTextUIShown = true
         else
             -- Update existing textUI (lib.showTextUI replaces existing)
-            lib.showTextUI(text, {
-                position = 'right-center',
+            lib.showTextUI(text, { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'right-center',
                 icon = icon,
                 style = {
                     borderRadius = 5,

@@ -1,15 +1,24 @@
--- SetFogDensity is not a FiveM native; emulate with a timecycle modifier
-local fogTcActive = false
-local function SetFogDensity(intensity)
-    if intensity and intensity > 0.01 then
-        SetTimecycleModifier('prologue_ending_fog')
-        SetTimecycleModifierStrength(math.min(intensity, 1.0))
-        fogTcActive = true
-    elseif fogTcActive then
-        ClearTimecycleModifier()
-        fogTcActive = false
-    end
+-- WEATHER CONTROL REMOVED (2026-08-19).
+-- This file used to drive weather itself: SetWeatherTypePersist/Now/NowPersist
+-- plus a fog emulation using the 'prologue_ending_fog' timecycle modifier at up
+-- to full strength. That is the game's opening-mission whiteout and it made the
+-- map unplayable. Worse, the onResourceStop handler restored the weather but
+-- never cleared the timecycle, so the fog survived a resource restart.
+--
+-- Renewed-Weathersync is the single weather authority on this server. Two
+-- scripts writing weather fight each other, exactly like dps-trains and
+-- dps-transit fighting over track state. Zone detection and the pay bonus stay;
+-- only the weather mutation is gone.
+local function SetFogDensity(_)
+    -- intentionally does nothing; kept so callers need no changes
 end
+
+-- Clear any fog this resource left behind previously, including across restarts.
+CreateThread(function()
+    Wait(1000)
+    ClearTimecycleModifier()
+    ClearExtraTimecycleModifier()
+end)
 
 --[[
     dps-maritime - Jetsam Company
@@ -135,9 +144,7 @@ local function StartWeatherZoneMonitor()
 
                 -- Set zone weather
                 if zone.weatherType then
-                    SetWeatherTypePersist(zone.weatherType)
-                    SetWeatherTypeNow(zone.weatherType)
-                    SetWeatherTypeNowPersist(zone.weatherType)
+                    -- weather writes removed: Renewed-Weathersync owns weather
                 end
 
                 lib.notify({
@@ -171,7 +178,7 @@ local function StartWeatherZoneMonitor()
                 -- Restore original weather
                 if OriginalWeather then
                     ClearWeatherTypePersist()
-                    SetWeatherTypeNow(OriginalWeather)
+                    -- weather restore removed: nothing to restore, we never changed it
                 end
 
                 -- Track zone crossing bonus
@@ -208,7 +215,7 @@ local function StartWeatherZoneMonitor()
                 -- ActiveWeatherZone during that exact frame (was a crash)
                 local zone = ActiveWeatherZone
                 if zone and zone.weatherType then
-                    SetWeatherTypePersist(zone.weatherType)
+                    -- weather write removed: Renewed-Weathersync owns weather
                 end
             else
                 Wait(500)
@@ -255,9 +262,8 @@ end)
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
 
-    -- Restore weather
-    if OriginalWeather then
-        ClearWeatherTypePersist()
-        SetWeatherTypeNow(OriginalWeather)
-    end
+    -- Do not touch weather (Renewed-Weathersync owns it). Do clear any timecycle
+    -- modifier, which the old code forgot and which is why fog persisted.
+    ClearTimecycleModifier()
+    ClearExtraTimecycleModifier()
 end)

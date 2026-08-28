@@ -201,8 +201,7 @@ function StartManifestTimer()
                 progress = progress .. string.format('\nPending: ~g~%s~w~ | ~b~+%d XP', Maritime.FormatMoney(PendingPay), PendingXP)
             end
 
-            lib.showTextUI(progress, {
-                position = 'top-center',
+            lib.showTextUI(progress, { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'top-center',
                 icon = 'box',
             })
         end

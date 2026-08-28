@@ -525,7 +525,8 @@ CreateThread(function()
 
                     if vehicle and vehicle == SpawnedBoat then
                         -- Show delivery prompt
-                        lib.showTextUI('[E] Complete Delivery', { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'right-center',
+                        lib.showTextUI('[E] Complete Delivery', {
+                            position = 'right-center',
                         })
 
                         if IsControlJustPressed(0, 38) then -- E key
@@ -901,7 +902,8 @@ function StartFuelMonitor()  -- global: called earlier in this file
                     end
 
                     -- Show rescue option
-                    lib.showTextUI('[G] Call Rescue (' .. Maritime.FormatMoney(Config.FuelEnforcement.RescueCost) .. ')', { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'right-center',
+                    lib.showTextUI('[G] Call Rescue (' .. Maritime.FormatMoney(Config.FuelEnforcement.RescueCost) .. ')', {
+                        position = 'right-center',
                         icon = 'ship',
                     })
 

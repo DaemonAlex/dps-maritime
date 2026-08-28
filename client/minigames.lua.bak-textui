@@ -76,7 +76,8 @@ local function DrawHazmatGauge()
             local pressure = hazmatState.pressure
             local status = pressure >= HAZMAT_CONFIG.greenZoneMin and pressure <= HAZMAT_CONFIG.greenZoneMax
                 and '[STABLE]' or '[UNSTABLE]'
-            lib.showTextUI('Pressure: ' .. math.floor(pressure) .. '% ' .. status, { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'right-center',
+            lib.showTextUI('Pressure: ' .. math.floor(pressure) .. '% ' .. status, {
+                position = 'right-center',
             })
         end
         return
@@ -522,7 +523,7 @@ function StartForkliftMinigame()
                 elseif Config.UI and Config.UI.UseTextUI then
                     -- ox_lib text alternative
                     local status = tiltPercent < 0.4 and 'STABLE' or (tiltPercent < 0.7 and 'WARNING' or 'DANGER')
-                    lib.showTextUI('Tilt: ' .. status, { style = { backgroundColor = '#1b2340', color = '#f4f1ea', borderLeft = '3px solid #ff7a45' }, iconColor = '#ff7a45', position = 'bottom-center' })
+                    lib.showTextUI('Tilt: ' .. status, { position = 'bottom-center' })
                 end
             end
 
